@@ -1,0 +1,23 @@
+{
+  "name": "宠物 MBTI",
+  "short_name": "宠物MBTI",
+  "description": "16 道场景题，测出毛孩子的人格与隐藏人设。",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fff1e5",
+  "theme_color": "#d95738",
+  "icons": [
+    {
+      "src": "assets/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
