@@ -34,6 +34,15 @@ test("具备可发布的 SEO、分享、PWA 和结构化数据声明", () => {
   }
 });
 
+test("静态托管安全头限制脚本来源、嵌入和敏感浏览器能力", () => {
+  const headers = read("_headers");
+  assert.match(headers, /Content-Security-Policy:/);
+  assert.match(headers, /frame-ancestors 'none'/);
+  assert.match(headers, /script-src 'self'/);
+  assert.match(headers, /X-Content-Type-Options: nosniff/);
+  assert.match(headers, /Permissions-Policy:/);
+});
+
 test("真实配置缺失时不伪造联系方式或网址", () => {
   const config = require("../site-config.js");
   assert.equal(config.releaseStage, "test");

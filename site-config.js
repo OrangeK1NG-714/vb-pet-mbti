@@ -17,7 +17,7 @@
     // 本地看板联调：指向 metrics 服务的 /api/collect。上线后改为正式 stats 域名，
     // 留空则 analytics 静默 no-op（不发送任何数据）。
     analytics: Object.freeze({
-      endpoint: "http://localhost:8787/api/collect",
+      endpoint: "",
       siteId: "pet-mbti"
     })
   });

@@ -7,6 +7,7 @@ import { generateAssets } from "./generate-assets.mjs";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = resolve(ROOT, "dist");
 const SOURCE_FILES = [
+  "_headers",
   "404.html",
   "analytics.js",
   "app.js",
