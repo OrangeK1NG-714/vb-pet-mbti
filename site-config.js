@@ -14,10 +14,10 @@
       wechat: "",
       email: ""
     }),
-    // 本地看板联调：指向 metrics 服务的 /api/collect。上线后改为正式 stats 域名，
+    // 统一看板：go-backend（api.richardq.tech）的 /api/collect。
     // 留空则 analytics 静默 no-op（不发送任何数据）。
     analytics: Object.freeze({
-      endpoint: "",
+      endpoint: "https://api.richardq.tech/api/collect",
       siteId: "pet-mbti"
     })
   });
