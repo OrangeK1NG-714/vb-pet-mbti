@@ -18,9 +18,12 @@ jobs:
       with:
         node-version: '22'
 
-    - name: Build static site
+    - name: Test and build static site
+      # 先跑完整检查（node --test 单元测试 + scripts/check.mjs 静态检查），
+      # 通过后才构建部署，避免把坏代码发上线。
       run: |
         npm install
+        npm run check
         npm run build
 
     - name: Deploy to server
@@ -43,6 +46,21 @@ jobs:
         port: 22
         script: |
           echo "✅ Pet MBTI deployed to /var/www/pet-mbti/"
+
+    - name: Verify online deployment
+      # 部署后真实探测线上站点，失败会让工作流标红（而不是静默假成功）
+      run: |
+        set -e
+        for attempt in 1 2 3 4 5; do
+          if curl --connect-timeout 10 --max-time 20 -fsS https://pet.richardq.tech > /dev/null; then
+            echo "✅ https://pet.richardq.tech 健康检查通过"
+            exit 0
+          fi
+          echo "等待线上就绪（第 $attempt 次）..."
+          sleep "$attempt"
+        done
+        echo "❌ 线上健康检查失败：https://pet.richardq.tech"
+        exit 1
 
     - name: Bark 通知
       if: always()
