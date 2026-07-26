@@ -7,6 +7,7 @@
   const config = window.PET_MBTI_SITE_CONFIG;
   const app = document.getElementById("app");
   let petType = "cat";
+  let breedKey = null;
   let answers = [];
   let currentQuestion = 0;
   let latestResult = null;
@@ -45,6 +46,7 @@
           <button type="button" data-pet="cat" class="${petType === "cat" ? "on" : ""}" aria-pressed="${petType === "cat"}"><span class="ic" aria-hidden="true">🐱</span>我家猫</button>
           <button type="button" data-pet="dog" class="${petType === "dog" ? "on" : ""}" aria-pressed="${petType === "dog"}"><span class="ic" aria-hidden="true">🐶</span>我家狗</button>
         </div>
+        <div class="breed-zone" id="breed-zone"></div>
         <button class="btn" type="button" id="start"><span aria-hidden="true">▶</span> 开始测试</button>
         <p class="foot">🥚 藏着 7 款超稀有隐藏人设 · 纯属娱乐</p>
         ${config.releaseStage !== "live" ? '<p class="status-note"><span aria-hidden="true">●</span> 当前为测试版，正式网址和联系方式尚未配置</p>' : ""}
@@ -52,19 +54,43 @@
 
     app.querySelectorAll("[data-pet]").forEach((button) => {
       button.addEventListener("click", () => {
+        if (petType !== button.dataset.pet) breedKey = null;
         petType = button.dataset.pet;
         app.querySelectorAll("[data-pet]").forEach((item) => {
           const selected = item === button;
           item.classList.toggle("on", selected);
           item.setAttribute("aria-pressed", String(selected));
         });
+        renderBreedZone();
       });
     });
+    renderBreedZone();
     document.getElementById("start").addEventListener("click", () => {
       answers = [];
       currentQuestion = 0;
-      track("start", { petType });
+      track("start", { petType, breed: breedKey });
       renderQuiz();
+    });
+  }
+
+  function renderBreedZone() {
+    const zone = document.getElementById("breed-zone");
+    if (!zone) return;
+    const breeds = Core.BREEDS[petType] || [];
+    const prediction = breedKey ? Core.getBreedPrediction(petType, breedKey) : null;
+    const chips = breeds.map((breed) => `
+      <button class="breed-chip${breed.key === breedKey ? " on" : ""}" type="button" data-breed="${breed.key}" aria-pressed="${breed.key === breedKey}">
+        <span aria-hidden="true">${breed.emoji}</span>${breed.label}
+      </button>`).join("");
+    zone.innerHTML = `
+      <p class="breed-label">选个品种，看民间预判（可选）</p>
+      <div class="breed-choose" role="group" aria-label="选择品种">${chips}</div>
+      ${prediction ? `<p class="breed-hint" role="status">📊 网传 ${prediction.percent}% 的${prediction.label}是「${prediction.profile.emoji} ${prediction.profile.title}」——测测你家是不是例外</p>` : ""}`;
+    zone.querySelectorAll("[data-breed]").forEach((button) => {
+      button.addEventListener("click", () => {
+        breedKey = breedKey === button.dataset.breed ? null : button.dataset.breed;
+        renderBreedZone();
+      });
     });
   }
 
@@ -136,6 +162,12 @@
     latestResult = Core.evaluateAnswers(answers);
     const { profile, code, egg, group, dimensions } = latestResult;
     const isEgg = Boolean(egg);
+    const prediction = breedKey ? Core.getBreedPrediction(petType, breedKey) : null;
+    const breedVerdict = !prediction ? "" : isEgg
+      ? `<p class="breed-verdict">📊 网传 ${prediction.percent}% 的${prediction.label}是「${prediction.profile.title}」，你家直接抽中隐藏人设——预判彻底失效</p>`
+      : code === prediction.code
+        ? `<p class="breed-verdict hit">📊 实锤！你家也在${prediction.label}那 ${prediction.percent}% 的「${prediction.profile.title}」大部队里</p>`
+        : `<p class="breed-verdict">📊 网传 ${prediction.percent}% 的${prediction.label}是「${prediction.profile.title}」，你家偏偏是「${profile.title}」——稀有的那一挂</p>`;
     const topTags = isEgg
       ? '<div class="egg-code">✨ 隐藏人设 · 已解锁 ✨</div>'
       : `<div class="meta-row"><span class="group-badge">${group.icon} ${group.name}</span><span class="code-chip">${code}</span></div>`;
@@ -150,6 +182,7 @@
           <p class="r-slogan">「${profile.slogan}」</p>
           <p class="rarity">稀有度 ${profile.rarity}%</p>
           <p class="r-desc">${profile.desc}</p>
+          ${breedVerdict}
           <div class="cp">
             <div class="cp-item good"><span class="lbl">最佳室友</span><strong class="val">${profile.good}</strong></div>
             <div class="cp-item bad"><span class="lbl">最容易打架</span><strong class="val">${profile.bad}</strong></div>
@@ -169,7 +202,7 @@
         ${config.releaseStage !== "live" ? '<p class="status-note result-status">测试阶段 · 暂未开放购买</p>' : ""}
       </section>`;
 
-    track("complete", { petType, code, egg: isEgg });
+    track("complete", { petType, code, egg: isEgg, breed: breedKey });
     document.getElementById("save").addEventListener("click", showShareCard);
     document.getElementById("invite").addEventListener("click", inviteFriend);
     document.getElementById("again").addEventListener("click", () => {

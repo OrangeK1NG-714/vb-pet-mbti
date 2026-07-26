@@ -95,6 +95,12 @@ try {
   cdp.on("Log.entryAdded", (event) => { if (event.entry.level === "error") consoleErrors.push(event.entry.text); });
   cdp.on("Network.loadingFailed", (event) => networkFailures.push(event.errorText));
   await cdp.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+  // QA runs must never send real analytics to the production collector (it
+  // would pollute the live dashboard and fails CORS from 127.0.0.1 anyway).
+  // analytics.js honors Do Not Track, so force it on for every page load.
+  await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
+    source: "Object.defineProperty(navigator, 'doNotTrack', { get: () => '1' });"
+  });
 
   const evaluate = async (expression) => {
     const result = await cdp.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
@@ -130,6 +136,10 @@ try {
 
   await viewport(375, 812, true);
   await navigate();
+  await evaluate("document.querySelector('[data-breed=\"ragdoll\"]').click()");
+  await sleep(40);
+  const breedHint = await evaluate("Boolean(document.querySelector('.breed-hint'))");
+  if (!breedHint) throw new Error("选择品种后未显示民间预判提示");
   await evaluate("document.querySelector('#start').click()");
   for (let index = 0; index < 16; index += 1) {
     await sleep(25);
@@ -143,6 +153,8 @@ try {
     overflow: document.documentElement.scrollWidth > window.innerWidth
   }))()`);
   if (!result.title || result.dimensions !== 4 || result.overflow) throw new Error(`结果页异常：${JSON.stringify(result)}`);
+  const breedVerdict = await evaluate("Boolean(document.querySelector('.breed-verdict'))");
+  if (!breedVerdict) throw new Error("选择品种后结果页缺少预判对照文案");
   screenshots.push(await screenshot("result-mobile.png"));
 
   const tree = await cdp.send("Accessibility.getFullAXTree");

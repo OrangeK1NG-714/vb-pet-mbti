@@ -103,6 +103,34 @@
     { key: "干饭本饭", emoji: "🍚", title: "干饭之神·恰饭本饭", rarity: 0.8, slogan: "叫我干什么？除非有吃的。", desc: "务实全满 + 规律全满——S·J 双维全满的干饭机器。人生只有一个主题：吃。掐着秒表蹲饭盆，多一秒不行；世界上没有一顿饭解决不了的情绪，如果有，那就两顿。", good: "家庭CEO（准点开饭的好搭子）", bad: "神游发明家（吃饭都能走神）", matches: (score) => score.S === 4 && score.J === 4 }
   ];
 
+  // 「品种预判」数据梗：网传比例纯属娱乐，code 必须指向 TYPES 里的真实结果。
+  const BREEDS = {
+    cat: [
+      { key: "ragdoll", label: "布偶", emoji: "🐰", code: "ESFP", percent: 78 },
+      { key: "orange", label: "橘猫", emoji: "🍊", code: "ISTJ", percent: 83 },
+      { key: "british", label: "英短", emoji: "🫖", code: "INTJ", percent: 71 },
+      { key: "civet", label: "狸花", emoji: "🐯", code: "ENTJ", percent: 76 },
+      { key: "siamese", label: "暹罗", emoji: "🎤", code: "ENFP", percent: 74 },
+      { key: "american", label: "美短", emoji: "🏃", code: "ESTP", percent: 69 }
+    ],
+    dog: [
+      { key: "golden", label: "金毛", emoji: "🌞", code: "ENFJ", percent: 82 },
+      { key: "corgi", label: "柯基", emoji: "🍑", code: "ESFJ", percent: 73 },
+      { key: "shiba", label: "柴犬", emoji: "🙃", code: "ENTP", percent: 77 },
+      { key: "border", label: "边牧", emoji: "🎓", code: "INTJ", percent: 85 },
+      { key: "husky", label: "哈士奇", emoji: "🌪️", code: "ESTP", percent: 88 },
+      { key: "teddy", label: "泰迪", emoji: "🎀", code: "ESFP", percent: 72 }
+    ]
+  };
+
+  function getBreedPrediction(petType, breedKey) {
+    const list = BREEDS[petType];
+    if (!list) return null;
+    const breed = list.find((item) => item.key === breedKey);
+    if (!breed) return null;
+    return { ...breed, profile: TYPES[breed.code] };
+  }
+
   const GROUPS = {
     NT: { name: "分析家", en: "Analysts", icon: "🧠", color: "#7656a8" },
     NF: { name: "外交官", en: "Diplomats", icon: "💚", color: "#23856d" },
@@ -204,6 +232,8 @@
     QUESTIONS,
     TYPES,
     EGGS,
+    BREEDS,
+    getBreedPrediction,
     GROUPS,
     DIMENSIONS,
     createEmptyScore,

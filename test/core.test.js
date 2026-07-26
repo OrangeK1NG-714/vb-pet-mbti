@@ -114,3 +114,26 @@ test("完整答案可一次得到分数、普通类型、彩蛋和维度", () =>
 test("结果计算拒绝不完整答卷", () => {
   assert.throws(() => Core.evaluateAnswers([]), RangeError);
 });
+
+test("品种预判覆盖猫狗、指向真实结果且比例合法", () => {
+  assert.deepEqual(Object.keys(Core.BREEDS).sort(), ["cat", "dog"]);
+  for (const [petType, breeds] of Object.entries(Core.BREEDS)) {
+    assert.ok(breeds.length >= 4, `${petType} 品种太少`);
+    const keys = breeds.map((breed) => breed.key);
+    assert.equal(new Set(keys).size, keys.length, `${petType} 品种 key 重复`);
+    for (const breed of breeds) {
+      assert.ok(breed.label.trim(), `${breed.key}.label`);
+      assert.ok(breed.emoji.trim(), `${breed.key}.emoji`);
+      assert.ok(Core.TYPES[breed.code], `${breed.key} 指向不存在的类型 ${breed.code}`);
+      assert.ok(Number.isInteger(breed.percent) && breed.percent > 0 && breed.percent < 100, `${breed.key}.percent`);
+    }
+  }
+});
+
+test("品种预判查询返回完整档案并拒绝未知输入", () => {
+  const prediction = Core.getBreedPrediction("cat", "ragdoll");
+  assert.equal(prediction.code, "ESFP");
+  assert.equal(prediction.profile, Core.TYPES.ESFP);
+  assert.equal(Core.getBreedPrediction("cat", "nonexistent"), null);
+  assert.equal(Core.getBreedPrediction("bird", "ragdoll"), null);
+});

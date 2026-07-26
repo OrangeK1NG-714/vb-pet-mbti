@@ -12,7 +12,7 @@
   "use strict";
 
   const ALLOWED_EVENTS = new Set(["start", "complete", "share", "intent"]);
-  const ALLOWED_PROPERTIES = new Set(["petType", "code", "egg", "channel", "product"]);
+  const ALLOWED_PROPERTIES = new Set(["petType", "code", "egg", "channel", "product", "breed"]);
 
   const ANON_KEY = "pet_mbti_anon_id";
 
