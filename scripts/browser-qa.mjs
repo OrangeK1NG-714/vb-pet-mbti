@@ -1,13 +1,23 @@
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const url = process.env.QA_URL || "http://127.0.0.1:4183";
 const chrome = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const debugPort = 9323;
 const output = await mkdtemp(join(tmpdir(), "pet-mbti-qa-"));
 const profile = join(output, "profile");
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const previewProcess = process.env.QA_URL
+  ? null
+  : spawn(process.execPath, [resolve(root, "scripts/serve.mjs"), "--port", "4183"], {
+      cwd: root,
+      stdio: "ignore"
+    });
 const processRef = spawn(chrome, [
   "--headless=new",
   "--disable-gpu",
@@ -20,8 +30,21 @@ const processRef = spawn(chrome, [
 
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
-async function findPageTarget() {
+async function waitForPreview() {
   for (let attempt = 0; attempt < 60; attempt += 1) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) return;
+    } catch (_error) {
+      // The preview server is still starting.
+    }
+    await sleep(100);
+  }
+  throw new Error(`无法连接预览站点：${url}`);
+}
+
+async function findPageTarget() {
+  for (let attempt = 0; attempt < 300; attempt += 1) {
     try {
       const targets = await fetch(`http://127.0.0.1:${debugPort}/json/list`).then((response) => response.json());
       const page = targets.find((target) => target.type === "page");
@@ -76,6 +99,7 @@ class CdpClient {
 
 let socket;
 try {
+  await waitForPreview();
   const endpoint = await findPageTarget();
   socket = new WebSocket(endpoint);
   await new Promise((resolve, reject) => {
@@ -179,6 +203,12 @@ try {
   console.log(JSON.stringify({ verdict: "PASS", url, screenshots, resultTitle: result.title, shareCard: card }, null, 2));
 } finally {
   socket?.close();
-  processRef.kill("SIGTERM");
-  await rm(profile, { recursive: true, force: true });
+  const children = [processRef, previewProcess].filter(Boolean);
+  for (const child of children) child.kill("SIGTERM");
+  await Promise.all(children.map((child) => (
+    child.exitCode === null
+      ? Promise.race([once(child, "exit"), sleep(3000)])
+      : Promise.resolve()
+  )));
+  await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }

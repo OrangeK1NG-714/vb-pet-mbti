@@ -37,7 +37,18 @@ jobs:
         target: "/var/www/pet-mbti/"
         strip_components: 1
 
-    - name: Notify deployment
+    - name: Upload Nginx configuration
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: 22
+        source: "deploy/nginx-pet.conf"
+        target: "/tmp/pet-deploy-${{ github.sha }}/"
+        strip_components: 1
+
+    - name: Activate Nginx configuration
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.SSH_HOST }}
@@ -45,15 +56,39 @@ jobs:
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         port: 22
         script: |
-          echo "✅ Pet MBTI deployed to /var/www/pet-mbti/"
+          set -Eeuo pipefail
+          NGINX=/www/server/nginx/sbin/nginx
+          VHOST=/www/server/panel/vhost/nginx/vb-pet.conf
+          CANDIDATE=/tmp/pet-deploy-${{ github.sha }}/nginx-pet.conf
+          BACKUP="$VHOST.before-${{ github.sha }}"
+          test -s "$CANDIDATE"
+          cp -p "$VHOST" "$BACKUP"
+          rollback() {
+            cp -p "$BACKUP" "$VHOST"
+            "$NGINX" -t && "$NGINX" -s reload
+          }
+          trap rollback ERR
+          install -m 644 "$CANDIDATE" "$VHOST"
+          "$NGINX" -t
+          "$NGINX" -s reload
+          rm -rf "/tmp/pet-deploy-${{ github.sha }}"
+          trap - ERR
+          echo "✅ Pet MBTI 与安全响应头已部署"
 
     - name: Verify online deployment
       # 部署后真实探测线上站点，失败会让工作流标红（而不是静默假成功）
       run: |
-        set -e
+        set -euo pipefail
+        headers="$(mktemp)"
+        trap 'rm -f "$headers"' EXIT
         for attempt in 1 2 3 4 5; do
-          if curl --connect-timeout 10 --max-time 20 -fsS https://pet.richardq.tech > /dev/null; then
-            echo "✅ https://pet.richardq.tech 健康检查通过"
+          if curl --connect-timeout 10 --max-time 20 -fsS -D "$headers" \
+              -o /dev/null https://pet.richardq.tech \
+              && grep -Eiq '^strict-transport-security:.*max-age=' "$headers" \
+              && grep -Eiq '^content-security-policy:' "$headers" \
+              && grep -Eiq '^x-content-type-options:[[:space:]]*nosniff' "$headers" \
+              && grep -Eiq '^x-frame-options:[[:space:]]*DENY' "$headers"; then
+            echo "✅ https://pet.richardq.tech 内容与安全头检查通过"
             exit 0
           fi
           echo "等待线上就绪（第 $attempt 次）..."
