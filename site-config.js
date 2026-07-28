@@ -5,11 +5,11 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
 
-  // 发布前只填写真实信息。留空时页面会明确显示“测试阶段”，不会展示伪联系方式。
+  // 这里只填写已经真实存在的信息；联系方式缺失时保持为空，不展示占位信息。
   return Object.freeze({
     siteName: "宠物 MBTI",
-    releaseStage: "test",
-    canonicalUrl: "",
+    releaseStage: "live",
+    canonicalUrl: "https://pet.richardq.tech/",
     contact: Object.freeze({
       wechat: "",
       email: ""

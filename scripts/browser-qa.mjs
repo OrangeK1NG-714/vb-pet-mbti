@@ -122,8 +122,16 @@ try {
   // QA runs must never send real analytics to the production collector (it
   // would pollute the live dashboard and fails CORS from 127.0.0.1 anyway).
   // analytics.js honors Do Not Track, so force it on for every page load.
+  // Stub native sharing as well so the live share target can be asserted
+  // without opening an operating-system share sheet.
   await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
-    source: "Object.defineProperty(navigator, 'doNotTrack', { get: () => '1' });"
+    source: `
+      Object.defineProperty(navigator, 'doNotTrack', { get: () => '1' });
+      Object.defineProperty(navigator, 'share', {
+        configurable: true,
+        value: async (payload) => { window.__sharePayload = payload; }
+      });
+    `
   });
 
   const evaluate = async (expression) => {
@@ -194,8 +202,24 @@ try {
   if (card.width !== 1080 || card.height !== 1440 || !card.dialog) throw new Error(`分享卡异常：${JSON.stringify(card)}`);
   await evaluate("document.querySelector('[data-close]').click()");
   await evaluate("document.querySelector('#invite').click()");
-  const disclosure = await evaluate("document.querySelector('[role=dialog]')?.textContent.includes('测试版')");
-  if (!disclosure) throw new Error("未配置正式网址时没有诚实显示测试态");
+  await sleep(20);
+  const sharePayload = await evaluate("window.__sharePayload");
+  if (sharePayload?.url !== "https://pet.richardq.tech/") {
+    throw new Error(`线上分享地址异常：${JSON.stringify(sharePayload)}`);
+  }
+  await evaluate(`
+    Object.defineProperty(navigator, 'share', { configurable: true, value: undefined });
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async () => { throw new Error('clipboard unavailable'); } }
+    });
+    document.querySelector('#invite').click();
+  `);
+  await sleep(20);
+  const fallbackUrl = await evaluate("document.querySelector('.share-url')?.textContent");
+  if (fallbackUrl !== "https://pet.richardq.tech/") {
+    throw new Error(`分享降级地址异常：${JSON.stringify(fallbackUrl)}`);
+  }
 
   if (consoleErrors.length || networkFailures.length) {
     throw new Error(`浏览器错误：${JSON.stringify({ consoleErrors, networkFailures })}`);
