@@ -300,7 +300,7 @@
         <div><strong>🖼️ 专属头像海报</strong><span>照片 + 人设称号，定制插画方向</span></div>
         <div><strong>🕯️ 宠物纪念卡</strong><span>为陪伴过的它，留下一张纪念</span></div>
       </div>
-      ${hasContact ? '<p class="contact-line">联系：<strong data-contact></strong></p>' : '<p class="test-disclosure">测试阶段尚未配置联系方式。这次点击只记录匿名意向，不会收集你的个人信息。</p>'}
+      ${hasContact ? '<p class="contact-line">联系：<strong data-contact></strong></p>' : '<p class="test-disclosure">当前只记录匿名意向，不会收集你的个人信息，也不会创建订单。</p>'}
       <button class="btn" type="button" data-close>${hasContact ? "好的" : "记下我的兴趣"}</button>`, "专属作品意向登记");
     const contact = dialog.modal.querySelector("[data-contact]");
     if (contact) contact.textContent = config.contact.wechat ? `微信 ${config.contact.wechat}` : config.contact.email;

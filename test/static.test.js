@@ -23,7 +23,9 @@ test("具备可发布的 SEO、分享、PWA 和结构化数据声明", () => {
   assert.match(html, /<title>[^<]*宠物 MBTI[^<]*<\/title>/);
   assert.match(html, /name="description" content="[^"]+"/);
   assert.match(html, /property="og:title"/);
-  assert.match(html, /property="og:image" content="assets\/share-cover\.png"/);
+  assert.match(html, /property="og:image" content="https:\/\/pet\.richardq\.tech\/assets\/share-cover\.png"/);
+  assert.match(html, /property="og:url" content="https:\/\/pet\.richardq\.tech\/"/);
+  assert.match(html, /rel="canonical" href="https:\/\/pet\.richardq\.tech\/"/);
   assert.match(html, /name="twitter:card" content="summary_large_image"/);
   assert.match(html, /rel="icon" href="assets\/favicon\.png"/);
   assert.match(html, /rel="manifest" href="manifest\.webmanifest"/);
@@ -43,13 +45,15 @@ test("静态托管安全头限制脚本来源、嵌入和敏感浏览器能力",
   assert.match(headers, /Permissions-Policy:/);
 });
 
-test("真实配置缺失时不伪造联系方式或网址", () => {
+test("线上分享使用真实 HTTPS 地址且不伪造联系方式", () => {
   const config = require("../site-config.js");
-  assert.equal(config.releaseStage, "test");
-  assert.equal(config.canonicalUrl, "");
+  assert.equal(config.releaseStage, "live");
+  assert.equal(config.canonicalUrl, "https://pet.richardq.tech/");
+  assert.equal(new URL(config.canonicalUrl).protocol, "https:");
   assert.equal(config.contact.wechat, "");
   assert.equal(config.contact.email, "");
   assert.doesNotMatch(read("app.js"), /加微信\s*petmbti|example\.com/i);
+  assert.doesNotMatch(read("app.js"), /测试阶段尚未配置联系方式/);
 });
 
 test("关键操作有可访问名、焦点样式和减少动态效果", () => {
