@@ -17,6 +17,7 @@ const SOURCE_FILES = [
   "core.js",
   "index.html",
   "manifest.webmanifest",
+  "quiz-controller.js",
   "robots.txt",
   "share-card.js",
   "site-config.js",

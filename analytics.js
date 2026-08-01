@@ -38,11 +38,15 @@
   function createAnalytics(config = {}, environment = {}) {
     const endpoint = typeof config.endpoint === "string" ? config.endpoint.trim() : "";
     const siteId = typeof config.siteId === "string" ? config.siteId.trim() : "";
-    const doNotTrack = environment.doNotTrack || (environment.navigator && environment.navigator.doNotTrack);
+    const doNotTrack = String(
+      environment.doNotTrack || (environment.navigator && environment.navigator.doNotTrack) || ""
+    ).toLowerCase();
     const anonId = resolveAnonId(environment);
 
     async function track(event, properties = {}) {
-      if (!endpoint || !siteId || doNotTrack === "1" || !ALLOWED_EVENTS.has(event)) return false;
+      if (!endpoint || !siteId || ["1", "yes"].includes(doNotTrack) || !ALLOWED_EVENTS.has(event)) {
+        return false;
+      }
 
       const safeProperties = {};
       for (const [key, value] of Object.entries(properties)) {
@@ -53,8 +57,24 @@
 
       const body = JSON.stringify({ siteId, project: siteId, anonId, event, properties: safeProperties });
       const navigatorRef = environment.navigator || {};
-      if (typeof navigatorRef.sendBeacon === "function") {
-        return navigatorRef.sendBeacon(endpoint, new Blob([body], { type: "application/json" }));
+      const locationRef = environment.location || (environment.window && environment.window.location);
+      let sameOrigin = false;
+      try {
+        sameOrigin = Boolean(locationRef) &&
+          new URL(endpoint, locationRef.href).origin === locationRef.origin;
+      } catch (_error) {
+        sameOrigin = false;
+      }
+      if (sameOrigin && typeof navigatorRef.sendBeacon === "function") {
+        try {
+          const queued = navigatorRef.sendBeacon(
+            endpoint,
+            new Blob([body], { type: "application/json" })
+          );
+          if (queued) return true;
+        } catch (_error) {
+          // Beacon 被浏览器拒绝时继续用 keepalive fetch，不能让统计异常冒泡到产品流程。
+        }
       }
 
       if (typeof environment.fetch !== "function") return false;
