@@ -2,19 +2,28 @@
   "use strict";
 
   const Core = window.PetMbtiCore;
+  const QuizController = window.PetMbtiQuizController;
   const ShareCard = window.PetMbtiShareCard;
   const analytics = window.PetMbtiAnalytics;
   const config = window.PET_MBTI_SITE_CONFIG;
   const app = document.getElementById("app");
-  let petType = "cat";
-  let breedKey = null;
-  let answers = [];
-  let currentQuestion = 0;
+  const quiz = QuizController.createQuizController({
+    questionCount: Core.QUESTIONS.length,
+    schedule: (callback, delay) => window.setTimeout(callback, delay),
+    cancel: (timerId) => window.clearTimeout(timerId)
+  });
   let latestResult = null;
 
-  const petWord = () => petType === "cat" ? "猫" : "狗";
-  const petIcon = () => petType === "cat" ? "🐱" : "🐶";
-  const track = (event, properties) => analytics.track(event, properties);
+  const petWord = (petType) => petType === "cat" ? "猫" : "狗";
+  const petIcon = (petType) => petType === "cat" ? "🐱" : "🐶";
+  const track = (event, properties) => {
+    try {
+      const pending = analytics.track(event, properties);
+      if (pending && typeof pending.catch === "function") pending.catch(() => false);
+    } catch (_error) {
+      // 统计永远不能中断答题、分享或意向登记。
+    }
+  };
 
   function updateConfiguredMetadata() {
     if (!config.canonicalUrl) return;
@@ -34,7 +43,8 @@
     requestAnimationFrame(() => app.querySelector("h1, h2")?.focus());
   }
 
-  function renderCover() {
+  function renderCover({ focus = false } = {}) {
+    const { petType, breedKey } = quiz.getState();
     latestResult = null;
     app.innerHTML = `
       <section class="cover" aria-labelledby="cover-title">
@@ -54,8 +64,7 @@
 
     app.querySelectorAll("[data-pet]").forEach((button) => {
       button.addEventListener("click", () => {
-        if (petType !== button.dataset.pet) breedKey = null;
-        petType = button.dataset.pet;
+        quiz.selectPet(button.dataset.pet);
         app.querySelectorAll("[data-pet]").forEach((item) => {
           const selected = item === button;
           item.classList.toggle("on", selected);
@@ -66,16 +75,17 @@
     });
     renderBreedZone();
     document.getElementById("start").addEventListener("click", () => {
-      answers = [];
-      currentQuestion = 0;
-      track("start", { petType, breed: breedKey });
+      const state = quiz.start();
+      track("start", { petType: state.petType, breed: state.breedKey });
       renderQuiz();
     });
+    if (focus) focusPageHeading();
   }
 
-  function renderBreedZone() {
+  function renderBreedZone(focusBreedKey = null) {
     const zone = document.getElementById("breed-zone");
     if (!zone) return;
+    const { petType, breedKey } = quiz.getState();
     const breeds = Core.BREEDS[petType] || [];
     const prediction = breedKey ? Core.getBreedPrediction(petType, breedKey) : null;
     const chips = breeds.map((breed) => `
@@ -88,15 +98,21 @@
       ${prediction ? `<p class="breed-hint" role="status">📊 网传 ${prediction.percent}% 的${prediction.label}是「${prediction.profile.emoji} ${prediction.profile.title}」——测测你家是不是例外</p>` : ""}`;
     zone.querySelectorAll("[data-breed]").forEach((button) => {
       button.addEventListener("click", () => {
-        breedKey = breedKey === button.dataset.breed ? null : button.dataset.breed;
-        renderBreedZone();
+        const selectedBreed = button.dataset.breed;
+        quiz.toggleBreed(selectedBreed);
+        renderBreedZone(selectedBreed);
       });
     });
+    if (focusBreedKey) {
+      requestAnimationFrame(() => zone.querySelector(`[data-breed="${focusBreedKey}"]`)?.focus());
+    }
   }
 
   function renderQuiz() {
+    const { currentQuestion, petType } = quiz.getState();
     const question = Core.QUESTIONS[currentQuestion];
-    const progress = Math.round((currentQuestion / Core.QUESTIONS.length) * 100);
+    const questionPosition = currentQuestion + 1;
+    const progress = Math.round((questionPosition / Core.QUESTIONS.length) * 100);
     const options = question.opts.map((option, index) => `
       <button class="option" type="button" data-answer="${option.v}" data-option="${index}">
         <span class="option-index" aria-hidden="true">${String.fromCharCode(65 + index)}</span>
@@ -107,35 +123,33 @@
       <section class="quiz" aria-labelledby="question-title">
         <div class="topbar">
           <button class="back icon-btn" type="button" id="back" aria-label="返回上一题">‹</button>
-          <div class="progress-wrap" role="progressbar" aria-label="答题进度" aria-valuemin="0" aria-valuemax="${Core.QUESTIONS.length}" aria-valuenow="${currentQuestion}">
+          <div class="progress-wrap" role="progressbar" aria-label="答题进度" aria-valuemin="1" aria-valuemax="${Core.QUESTIONS.length}" aria-valuenow="${questionPosition}" aria-valuetext="第 ${questionPosition} 题，共 ${Core.QUESTIONS.length} 题">
             <div class="progress-bar" style="width:${progress}%"></div>
           </div>
-          <div class="progress-txt">${currentQuestion + 1}/${Core.QUESTIONS.length}</div>
+          <div class="progress-txt">${questionPosition}/${Core.QUESTIONS.length}</div>
         </div>
-        <p class="q-num">第 ${currentQuestion + 1} 题 · 关于你家${petWord()}${petIcon()}</p>
+        <p class="q-num">第 ${currentQuestion + 1} 题 · 关于你家${petWord(petType)}${petIcon(petType)}</p>
         <h1 class="q-title" id="question-title" tabindex="-1">${question.q}</h1>
         <div class="options">${options}</div>
       </section>`;
 
     document.getElementById("back").addEventListener("click", () => {
-      if (currentQuestion === 0) renderCover();
-      else {
-        currentQuestion -= 1;
-        answers = answers.slice(0, currentQuestion + 1);
-        renderQuiz();
-      }
+      const state = quiz.back();
+      if (state.screen === QuizController.SCREENS.COVER) renderCover({ focus: true });
+      else renderQuiz();
     });
     app.querySelectorAll("[data-answer]").forEach((button) => {
       button.addEventListener("click", () => {
+        const accepted = quiz.answer(button.dataset.answer, {
+          delay: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 160,
+          onAdvance: ({ kind }) => {
+            if (kind === "question") renderQuiz();
+            else renderResult();
+          }
+        });
+        if (!accepted) return;
         app.querySelectorAll("[data-answer]").forEach((item) => item.disabled = true);
         button.classList.add("sel");
-        answers[currentQuestion] = button.dataset.answer;
-        window.setTimeout(() => {
-          if (currentQuestion < Core.QUESTIONS.length - 1) {
-            currentQuestion += 1;
-            renderQuiz();
-          } else renderResult();
-        }, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 160);
       });
     });
     focusPageHeading();
@@ -159,6 +173,7 @@
   }
 
   function renderResult() {
+    const { answers, petType, breedKey } = quiz.getState();
     latestResult = Core.evaluateAnswers(answers);
     const { profile, code, egg, group, dimensions } = latestResult;
     const isEgg = Boolean(egg);
@@ -206,11 +221,13 @@
     document.getElementById("save").addEventListener("click", showShareCard);
     document.getElementById("invite").addEventListener("click", inviteFriend);
     document.getElementById("again").addEventListener("click", () => {
-      answers = [];
-      currentQuestion = 0;
-      renderCover();
+      quiz.retest();
+      renderCover({ focus: true });
     });
-    document.getElementById("home").addEventListener("click", renderCover);
+    document.getElementById("home").addEventListener("click", () => {
+      quiz.home();
+      renderCover({ focus: true });
+    });
     document.getElementById("softlink").addEventListener("click", showIntentModal);
     focusPageHeading();
   }
@@ -250,11 +267,21 @@
   }
 
   function showShareCard() {
-    const card = ShareCard.createShareCard(latestResult, {
-      petType,
-      releaseStage: config.releaseStage,
-      siteLabel: config.canonicalUrl || config.siteName
-    });
+    let card;
+    try {
+      const { petType } = quiz.getState();
+      card = ShareCard.createShareCard(latestResult, {
+        petType,
+        releaseStage: config.releaseStage,
+        siteLabel: config.canonicalUrl || config.siteName
+      });
+    } catch (_error) {
+      openModal(`
+        <h2>分享卡生成失败</h2>
+        <p class="modal-copy">当前浏览器暂时无法生成 PNG，请稍后重试；你仍可以使用“邀请朋友也来测”分享链接。</p>
+        <button class="btn" type="button" data-close>知道了</button>`, "分享卡生成失败");
+      return;
+    }
     const dialog = openModal(`
       <p class="modal-tip">长按图片保存到相册<br><span>电脑端可使用“下载 PNG”</span></p>
       <img class="card-img" src="${card.dataUrl}" alt="${latestResult.profile.title}宠物 MBTI 结果卡，${card.width}乘${card.height}像素" tabindex="0">
@@ -275,17 +302,34 @@
       return;
     }
     const shareData = { title: "宠物 MBTI", text: "测测你家毛孩子到底是什么型？", url: config.canonicalUrl };
+    let canUseNativeShare = typeof navigator.share === "function";
+    if (canUseNativeShare && typeof navigator.canShare === "function") {
+      try {
+        canUseNativeShare = navigator.canShare(shareData);
+      } catch (_error) {
+        canUseNativeShare = false;
+      }
+    }
+    if (canUseNativeShare) {
+      try {
+        await navigator.share(shareData);
+        track("share", { code: latestResult.code, egg: Boolean(latestResult.egg), channel: "native" });
+        return;
+      } catch (error) {
+        if (error && error.name === "AbortError") return;
+      }
+    }
     try {
-      if (navigator.share) await navigator.share(shareData);
-      else await navigator.clipboard.writeText(config.canonicalUrl);
-      track("share", { code: latestResult.code, egg: Boolean(latestResult.egg), channel: navigator.share ? "native" : "copy" });
-      if (!navigator.share) {
-        openModal('<p class="modal-icon" aria-hidden="true">✓</p><h2>链接已复制</h2><p class="modal-copy">发给朋友，看看 TA 家毛孩子是哪一型。</p><button class="btn" type="button" data-close>好的</button>', "链接已复制");
+      if (!navigator.clipboard || typeof navigator.clipboard.writeText !== "function") {
+        throw new Error("clipboard unavailable");
       }
-    } catch (error) {
-      if (error.name !== "AbortError") {
-        openModal(`<h2>复制这个链接</h2><p class="share-url"></p><button class="btn" type="button" data-close>关闭</button>`, "分享链接").modal.querySelector(".share-url").textContent = config.canonicalUrl;
-      }
+      await navigator.clipboard.writeText(config.canonicalUrl);
+      track("share", { code: latestResult.code, egg: Boolean(latestResult.egg), channel: "copy" });
+      openModal('<p class="modal-icon" aria-hidden="true">✓</p><h2>链接已复制</h2><p class="modal-copy">发给朋友，看看 TA 家毛孩子是哪一型。</p><button class="btn" type="button" data-close>好的</button>', "链接已复制");
+      return;
+    } catch (_error) {
+      const dialog = openModal(`<h2>复制这个链接</h2><p class="share-url"></p><button class="btn" type="button" data-close>关闭</button>`, "分享链接");
+      dialog.modal.querySelector(".share-url").textContent = config.canonicalUrl;
     }
   }
 

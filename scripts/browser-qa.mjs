@@ -170,8 +170,46 @@ try {
   await navigate();
   await evaluate("document.querySelector('[data-breed=\"ragdoll\"]').click()");
   await sleep(40);
-  const breedHint = await evaluate("Boolean(document.querySelector('.breed-hint'))");
-  if (!breedHint) throw new Error("选择品种后未显示民间预判提示");
+  const breedState = await evaluate(`(() => ({
+    hint: Boolean(document.querySelector('.breed-hint')),
+    focusedBreed: document.activeElement?.dataset?.breed
+  }))()`);
+  if (!breedState.hint) throw new Error("选择品种后未显示民间预判提示");
+  if (breedState.focusedBreed !== "ragdoll") {
+    throw new Error(`品种选择后焦点丢失：${JSON.stringify(breedState)}`);
+  }
+  await evaluate("document.querySelector('#start').click()");
+  await sleep(20);
+  const firstQuestionProgress = await evaluate(`(() => {
+    const progress = document.querySelector('[role="progressbar"]');
+    return {
+      now: progress?.getAttribute('aria-valuenow'),
+      text: progress?.getAttribute('aria-valuetext'),
+      width: document.querySelector('.progress-bar')?.style.width
+    };
+  })()`);
+  if (
+    firstQuestionProgress.now !== "1" ||
+    firstQuestionProgress.text !== "第 1 题，共 16 题" ||
+    firstQuestionProgress.width !== "6%"
+  ) {
+    throw new Error(`首题进度异常：${JSON.stringify(firstQuestionProgress)}`);
+  }
+  screenshots.push(await screenshot("quiz-mobile.png"));
+  await evaluate("document.querySelector('#back').click()");
+  await sleep(20);
+  const coverFocus = await evaluate("document.activeElement?.id");
+  if (coverFocus !== "cover-title") throw new Error(`返回首页后焦点异常：${coverFocus}`);
+  await evaluate("document.querySelector('#start').click()");
+  await evaluate(`
+    document.querySelector('[data-answer]').click();
+    document.querySelector('#back').click();
+  `);
+  await sleep(40);
+  const staleAdvanceTarget = await evaluate("document.querySelector('#cover-title')?.id || document.querySelector('#question-title')?.textContent");
+  if (staleAdvanceTarget !== "cover-title") {
+    throw new Error(`返回首页后旧答题定时器仍推进状态：${staleAdvanceTarget}`);
+  }
   await evaluate("document.querySelector('#start').click()");
   for (let index = 0; index < 16; index += 1) {
     await sleep(25);
@@ -193,6 +231,18 @@ try {
   const unnamedButtons = tree.nodes.filter((node) => node.role?.value === "button" && !node.name?.value);
   if (unnamedButtons.length) throw new Error(`发现 ${unnamedButtons.length} 个无可访问名按钮`);
 
+  await evaluate(`
+    window.__createShareCard = window.PetMbtiShareCard.createShareCard;
+    window.PetMbtiShareCard.createShareCard = () => { throw new Error('canvas unavailable'); };
+    document.querySelector('#save').click();
+  `);
+  await sleep(20);
+  const cardError = await evaluate("document.querySelector('[role=\"dialog\"] h2')?.textContent");
+  if (cardError !== "分享卡生成失败") throw new Error(`分享卡异常未被降级处理：${cardError}`);
+  await evaluate(`
+    document.querySelector('[data-close]').click();
+    window.PetMbtiShareCard.createShareCard = window.__createShareCard;
+  `);
   await evaluate("document.querySelector('#save').click()");
   await sleep(350);
   const card = await evaluate(`(() => {
@@ -207,6 +257,29 @@ try {
   if (sharePayload?.url !== "https://pet.richardq.tech/") {
     throw new Error(`线上分享地址异常：${JSON.stringify(sharePayload)}`);
   }
+  await evaluate(`
+    Object.defineProperty(navigator, 'share', {
+      configurable: true,
+      value: async () => { throw new Error('native share unavailable'); }
+    });
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async (value) => { window.__clipboardValue = value; } }
+    });
+    document.querySelector('#invite').click();
+  `);
+  await sleep(20);
+  const clipboardFallback = await evaluate(`(() => ({
+    value: window.__clipboardValue,
+    copied: document.querySelector('[role="dialog"] h2')?.textContent
+  }))()`);
+  if (
+    clipboardFallback.value !== "https://pet.richardq.tech/" ||
+    clipboardFallback.copied !== "链接已复制"
+  ) {
+    throw new Error(`原生分享失败后未降级到剪贴板：${JSON.stringify(clipboardFallback)}`);
+  }
+  await evaluate("document.querySelector('[data-close]').click()");
   await evaluate(`
     Object.defineProperty(navigator, 'share', { configurable: true, value: undefined });
     Object.defineProperty(navigator, 'clipboard', {

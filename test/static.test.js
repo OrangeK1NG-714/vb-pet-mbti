@@ -6,9 +6,9 @@ const test = require("node:test");
 const ROOT = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(ROOT, file), "utf8");
 
-test("入口按配置、核心、统计、分享、DOM 应用的顺序加载", () => {
+test("入口按配置、核心、应用控制器、统计、分享、DOM 应用的顺序加载", () => {
   const html = read("index.html");
-  const scripts = ["site-config.js", "core.js", "analytics.js", "share-card.js", "app.js"];
+  const scripts = ["site-config.js", "core.js", "quiz-controller.js", "analytics.js", "share-card.js", "app.js"];
   let previous = -1;
   for (const script of scripts) {
     const current = html.indexOf(`src="${script}"`);

@@ -11,7 +11,7 @@ const read = (file) => readFile(resolve(ROOT, file), "utf8");
 
 await generateAssets();
 
-for (const file of ["analytics.js", "app.js", "core.js", "share-card.js", "site-config.js"]) {
+for (const file of ["analytics.js", "app.js", "core.js", "quiz-controller.js", "share-card.js", "site-config.js"]) {
   try {
     execFileSync(process.execPath, ["--check", resolve(ROOT, file)], { stdio: "pipe" });
   } catch (error) {

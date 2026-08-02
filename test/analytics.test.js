@@ -20,6 +20,52 @@ test("尊重 Do Not Track，不发送任何事件", async () => {
   assert.equal(calls, 0);
 });
 
+test("Do Not Track 的 yes 形式同样不发送事件", async () => {
+  let calls = 0;
+  const analytics = createAnalytics(
+    { endpoint: "/events", siteId: "pet-mbti" },
+    { doNotTrack: "yes", fetch: async () => { calls += 1; } }
+  );
+  assert.equal(await analytics.track("start"), false);
+  assert.equal(calls, 0);
+});
+
+test("跨域统计绕过 credentialed beacon，使用无凭据 keepalive fetch", async () => {
+  let beaconCalls = 0;
+  const requests = [];
+  const analytics = createAnalytics(
+    { endpoint: "https://api.example.test/events", siteId: "pet-mbti" },
+    {
+      location: new URL("https://pet.example.test/"),
+      navigator: { sendBeacon: () => { beaconCalls += 1; return true; } },
+      fetch: async (url, options) => { requests.push({ url, options }); return { ok: true }; }
+    }
+  );
+
+  assert.equal(await analytics.track("start"), true);
+  assert.equal(beaconCalls, 0);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].options.credentials, "omit");
+  assert.equal(requests[0].options.keepalive, true);
+});
+
+test("同源 beacon 入队失败时降级到 keepalive fetch", async () => {
+  let beaconCalls = 0;
+  let fetchCalls = 0;
+  const analytics = createAnalytics(
+    { endpoint: "/events", siteId: "pet-mbti" },
+    {
+      location: new URL("https://pet.example.test/"),
+      navigator: { sendBeacon: () => { beaconCalls += 1; return false; } },
+      fetch: async () => { fetchCalls += 1; return { ok: true }; }
+    }
+  );
+
+  assert.equal(await analytics.track("complete"), true);
+  assert.equal(beaconCalls, 1);
+  assert.equal(fetchCalls, 1);
+});
+
 test("仅发送白名单事件和去标识化属性", async () => {
   const requests = [];
   const analytics = createAnalytics(
